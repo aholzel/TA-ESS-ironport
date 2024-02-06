@@ -1,0 +1,113 @@
+<form>
+  <search id="email_BaseSearch">
+    <query>`ironport_log`
+| eval mid=if(internal_message_id!="", internal_message_id, "")
+| streamstats values(internal_message_id) as internal_message_id by icid 
+| eval internal_message_id=if(mid==internal_message_id, mid, internal_message_id)
+| stats min(_time) AS _time, values(file_name) AS file_name, values(recipient) AS recipient, values(sender) AS sender, values(subject) AS subject, values(message_size) AS message_size, values(spam_status) AS spam_status, values(antivirus_status) AS antivirus_status, values(virus_vendor_category) AS virus_vendor_category, values(reason) AS reason, values(icid) AS icid, values(dcid) AS dcid values(inc_ip) AS inc_ip, values(inc_interface) AS inc_interface, values(inc_remote_ip) AS inc_remote_ip, values(inc_remote_hostname) AS inc_remote_hostname, values(sender_reputation) AS sender_reputation BY internal_message_id host
+| search (sender=* OR recipient=*)
+| rex field=sender "@(?&lt;s_domain&gt;.*)" 
+| rex field=recipient "@(?&lt;r_domain&gt;.*)"</query>
+    <earliest>$TimeRange.earliest$</earliest>
+    <latest>$TimeRange.latest$</latest>
+  </search>
+  <label>Email overview</label>
+  <fieldset submitButton="false" autoRun="false">
+    <input type="time" token="TimeRange" searchWhenChanged="true">
+      <label>Time Range</label>
+      <default>
+        <earliest>-60m@m</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <single>
+        <title>Most viruses recieved</title>
+        <search base="email_BaseSearch">
+          <query>| search antivirus_status=positive [ | inputlookup cim_corporate_email_domain_lookup | rename domain AS r_domain]  | stats count by recipient  | sort-count  | eval topRecipient=recipient." (".count.")"  | head 1   | fields topRecipient</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="colorBy">value</option>
+        <option name="colorMode">none</option>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0x65a637","0x6db7c6","0xf7bc38","0xf58f39","0xd93f3c"]</option>
+        <option name="rangeValues">[0,30,70,100]</option>
+        <option name="showSparkline">1</option>
+        <option name="showTrendIndicator">1</option>
+        <option name="trendColorInterpretation">standard</option>
+        <option name="trendDisplayMode">absolute</option>
+        <option name="unitPosition">after</option>
+        <option name="useColors">0</option>
+        <option name="useThousandSeparators">1</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Most viruses send</title>
+        <search base="email_BaseSearch">
+          <query>| search antivirus_status=positive [ | inputlookup cim_corporate_email_domain_lookup | rename domain AS s_domain]  | stats count by sender  | sort-count  | head 1  | eval topSender=sender." (".count.")"  | fields topSender</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="colorBy">value</option>
+        <option name="colorMode">none</option>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0x65a637","0x6db7c6","0xf7bc38","0xf58f39","0xd93f3c"]</option>
+        <option name="rangeValues">[0,30,70,100]</option>
+        <option name="showSparkline">1</option>
+        <option name="showTrendIndicator">1</option>
+        <option name="trendColorInterpretation">standard</option>
+        <option name="trendDisplayMode">absolute</option>
+        <option name="unitPosition">after</option>
+        <option name="useColors">0</option>
+        <option name="useThousandSeparators">1</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <title>Malware incoming mail</title>
+        <search base="email_BaseSearch">
+          <query>| search antivirus_status=positive [ | inputlookup cim_corporate_email_domain_lookup | rename domain AS r_domain]  | table _time sender recipient subject virus_vendor_category  inc_remote_hostname inc_remote_ip file_name</query>
+        </search>
+        <option name="wrap">true</option>
+        <option name="rowNumbers">false</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">cell</option>
+        <option name="count">10</option>
+      </table>
+    </panel>
+    <panel>
+      <table>
+        <title>Malware outgoing mail</title>
+        <search base="email_BaseSearch">
+          <query>| search antivirus_status=positive [ | inputlookup cim_corporate_email_domain_lookup | rename domain AS s_domain] 
+| table _time sender recipient subject virus_vendor_category</query>
+        </search>
+        <option name="wrap">true</option>
+        <option name="rowNumbers">false</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">cell</option>
+        <option name="count">5</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Excessive mailers</title>
+      <table>
+        <title>upperlimit=Average+(4*stdev)</title>
+        <search base="email_BaseSearch">
+          <query>| search [ | inputlookup cim_corporate_email_domain_lookup | rename domain AS s_domain] NOT [ | inputlookup bulk_mail_sender | rename mailaddress as sender]  | stats count by sender  | sort-count  | eventstats mean(count) AS Average, stdev(count) as stdev  | eval upperlimit=Average+(4*stdev) | where count&gt;upperlimit  | table sender count Average stdev upperlimit  | rename sender AS "Sender adres", count AS "# of mails Send", Average AS "Average per user", stdev AS "Standard deviation", upperlimit AS "Upper Limit"</query>
+        </search>
+        <option name="wrap">true</option>
+        <option name="rowNumbers">false</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">cell</option>
+        <option name="count">5</option>
+      </table>
+    </panel>
+  </row>
+</form>

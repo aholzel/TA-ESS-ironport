@@ -1,0 +1,19 @@
+[datamodels/Ironport_Mail]
+access = read : [ * ], write : [ admin ]
+export = system
+owner = admin
+version = 6.3.3
+modtime = 1461570512.057466000
+
+[models/Ironport_Mail]
+access = read : [ * ], write : [ admin ]
+export = system
+owner = admin
+version = 6.3.3
+modtime = 1461570512.063153000
+
+[macros/ironport_index_sourcetype]
+export = system
+owner = admin
+version = 6.3.3
+modtime = 1462298271.477381000

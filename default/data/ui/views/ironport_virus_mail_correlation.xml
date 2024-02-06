@@ -1,0 +1,140 @@
+<form>
+  <search id="BaseSearch_email_virus_mail_correlation">
+    <query>`ironport_log`
+  [ search `ironport_log`
+    [ search `ironport_log`     [ search `ironport_log` antivirus_status=positive       | stats count by internal_message_id host       | table host internal_message_id      ]     | stats values(sender) AS sender, values(subject) AS subject, values(file_name) AS file_name by internal_message_id host     | table sender      ]   
+  | append [ search `ironport_log`     [ search `ironport_log` antivirus_status=positive       | stats count by internal_message_id host       | table host internal_message_id      ]     | stats values(sender) AS sender, values(subject) AS subject, values(file_name) AS file_name by internal_message_id host     | table subject    ]   
+  | append [ search `ironport_log`     [ search `ironport_log` antivirus_status=positive       | stats count by internal_message_id host       | table host internal_message_id      ]     | stats values(sender) AS sender, values(subject) AS subject, values(file_name) AS file_name by internal_message_id host     | table file_name    ]   
+  | table internal_message_id host ] 
+| stats min(_time) AS _time, values(file_name) AS file_name, values(recipient) AS recipient, values(sender) AS sender, values(subject) AS subject, values(message_size) AS message_size, values(spam_status) AS spam_status, values(antivirus_status) AS antivirus_status, values(virus_vendor_category) AS virus_vendor_category, values(signature) AS signature, values(icid) AS icid, values(dcid) AS dcid BY internal_message_id host  
+| rex field=sender "@(?&lt;s_domain&gt;.*)"  
+| rex field=recipient "@(?&lt;r_domain&gt;.*)"  
+| fillnull spam_status antivirus_status value="negative"
+| eval action=case((spam_status=="positive" OR antivirus_status=="positive"), "blocked", signature!="", "blocked", (dcid!=""), "allowed", spam_status=="negative" AND antivirus_status=="negative", "allowed", 1==1, "unknown") 
+| table _time host action internal_message_id icid dcid sender recipient subject file_name signature message_size spam_status antivirus_status virus_vendor_category host 
+| sort - _time
+| lookup addressbook email AS recipient
+| search $action_select$ $spamStatus_select$ $antivirusStatus_Select$</query>
+    <earliest>$timeRange.earliest$</earliest>
+    <latest>$timeRange.latest$</latest>
+  </search>
+  <label>Email Virus Mail correlation</label>
+  <description>Dashboard met alle emails dezelfde sender OF subject OF attachment hebben als mails die een virus bevatten.</description>
+  <fieldset submitButton="true" autoRun="true">
+    <input type="time" token="timeRange" searchWhenChanged="false">
+      <label>Time Range</label>
+      <default>
+        <earliest>-14d@d</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="dropdown" token="action_select" searchWhenChanged="false">
+      <label>Action</label>
+      <choice value="*">ALL</choice>
+      <choice value="allowed">Allowed</choice>
+      <choice value="blocked">Blocked</choice>
+      <choice value="unknown">Unknown</choice>
+      <prefix>action="</prefix>
+      <suffix>"</suffix>
+      <default>*</default>
+      <initialValue>*</initialValue>
+    </input>
+    <input type="dropdown" token="spamStatus_select" searchWhenChanged="false">
+      <label>Spam Status</label>
+      <choice value="*">ALL</choice>
+      <choice value="negative">Negative</choice>
+      <choice value="positive">Positive</choice>
+      <choice value="suspect">Suspect</choice>
+      <default>*</default>
+      <prefix>spam_status="</prefix>
+      <suffix>"</suffix>
+      <initialValue>*</initialValue>
+    </input>
+    <input type="dropdown" token="antivirusStatus_Select" searchWhenChanged="false">
+      <label>Antivirus Status</label>
+      <choice value="*">ALL</choice>
+      <choice value="negative">Negative</choice>
+      <choice value="positive">Positive</choice>
+      <prefix>antivirus_status="</prefix>
+      <suffix>"</suffix>
+      <default>*</default>
+      <initialValue>*</initialValue>
+    </input>
+    <input type="text" token="senderRecipient_Text">
+      <label>Sender OR Recipient address</label>
+      <default>*</default>
+      <prefix>"</prefix>
+      <suffix>"</suffix>
+      <initialValue>*</initialValue>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <single>
+        <title>addressbook hit rate</title>
+        <search base="BaseSearch_email_virus_mail_correlation">
+          <query>| eval addressbook_hit=if((isnotnull(username) OR username!=""), "YES", "NO") | top addressbook_hit | where addressbook_hit=="YES" | fields percent</query>
+        </search>
+        <option name="drilldown">none</option>
+        <option name="colorBy">value</option>
+        <option name="colorMode">none</option>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0x65a637","0x6db7c6","0xf7bc38","0xf58f39","0xd93f3c"]</option>
+        <option name="rangeValues">[0,30,70,100]</option>
+        <option name="showSparkline">1</option>
+        <option name="showTrendIndicator">1</option>
+        <option name="trendColorInterpretation">standard</option>
+        <option name="trendDisplayMode">absolute</option>
+        <option name="unitPosition">after</option>
+        <option name="useColors">0</option>
+        <option name="useThousandSeparators">0</option>
+        <option name="unit">%</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Unieke ontvangers (all)</title>
+        <search base="BaseSearch_email_virus_mail_correlation">
+          <query>| stats dc(recipient) AS dc_recipient
+| fields dc_recipient</query>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Unieke ontvangers (addressbook hit)</title>
+        <search base="BaseSearch_email_virus_mail_correlation">
+          <query>| eval addressbook_hit=if((isnotnull(username) OR username!=""), "YES", "NO")
+| where addressbook_hit=="YES"
+| stats dc(recipient) AS dc_recipient
+| fields dc_recipient</query>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+    <panel>
+      <single>
+        <title>Aantal "verdachte" mails</title>
+        <search base="BaseSearch_email_virus_mail_correlation">
+          <query>| stats count</query>
+        </search>
+        <option name="drilldown">none</option>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <table>
+        <search base="BaseSearch_email_virus_mail_correlation">
+          <query>| search (sender=$senderRecipient_Text$ OR recipient=$senderRecipient_Text$)</query>
+        </search>
+        <option name="wrap">true</option>
+        <option name="rowNumbers">false</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">cell</option>
+        <option name="count">10</option>
+      </table>
+    </panel>
+  </row>
+</form>

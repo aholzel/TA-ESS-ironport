@@ -1,0 +1,133 @@
+<form>
+  <label>Ironport mail search</label>
+  <description>Search all information for mail via the Ironport, based on sender, recipient or attachment name. Click on a row to view the "raw" log from the Ironport</description>
+  <fieldset submitButton="true" autoRun="false">
+    <input type="time" token="timeRange">
+      <label>Time range</label>
+      <default>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="dropdown" token="keyField">
+      <label>Key Field</label>
+      <choice value="action">Action</choice>
+      <choice value="antivirus_status">Antivirus status</choice>
+      <choice value="file_name">Attachment Name</choice>
+      <choice value="recipient">Recipient</choice>
+      <choice value="src_user">Sender</choice>
+      <choice value="spam_status">Spam status</choice>
+      <choice value="subject">Subject</choice>
+    </input>
+    <input type="radio" token="compairRadio">
+      <label>Compair</label>
+      <choice value="=">Is</choice>
+      <choice value="!=">Is NOT</choice>
+      <default>=</default>
+      <initialValue>=</initialValue>
+    </input>
+    <input type="text" token="valueField">
+      <label>Value</label>
+      <prefix>"</prefix>
+      <suffix>"</suffix>
+    </input>
+  </fieldset>
+  <row>
+    <panel>
+      <table>
+        <search>
+          <query>`ironport_summary` $keyField$$compairRadio$$valueField$ 
+| stats min(_time) AS _time, values(src_user) AS sender, values(recipient) AS recipient, values(subject) AS subject, values(message_size) AS message_size, values(file_name) AS file_name, values(spam_status) AS spam_status, values(antivirus_status) AS antivirus_status, values(virus_vendor_category) AS virus_vendor_category, values(reason) AS reason, values(icid) AS icid, values(dcid) AS dcid values(inc_ip) AS inc_ip, values(inc_interface) AS inc_interface, values(inc_remote_ip) AS inc_remote_ip, values(inc_remote_hostname) AS inc_remote_hostname, values(sender_reputation) AS sender_reputation, values(out_ip) AS out_ip, values(out_remote_ip) AS out_remote_ip, values(out_remote_port) AS out_remote_port, values(out_protocol) AS out_protocol, values(out_cipher) AS out_cipher, values(xref) AS internal_message_id, values(message_info) AS message_info BY first_mid host 
+| rex field=message_info "mid\:(?&lt;mi_mid&gt;[^\,]+)\,\sicid\:(?&lt;mi_icid&gt;\d+)\,\sdcid\:(?&lt;mi_dcid&gt;\d+)"
+| eval internal_message_id=split(internal_message_id, " "), internal_message_id_token=mvjoin(internal_message_id, " OR internal_message_id="), internal_message_id_eval_token=mvjoin(internal_message_id, " OR internal_message_id=="), internal_message_id_eval_not_token=mvjoin(internal_message_id, " OR internal_message_id!="), icid=if(isnull(icid) OR icid="", mi_icid, icid), dcid=if(isnull(dcid) OR dcid="", mi_dcid, dcid)
+| sort 0 - _time</query>
+          <earliest>$timeRange.earliest$</earliest>
+          <latest>$timeRange.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">cell</option>
+        <option name="percentagesRow">false</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+        <fields>["_time","sender","recipient","subject","file_name","message_size","spam_status","antivirus_status","virus_vendor_category"]</fields>
+        <drilldown>
+          <set token="details_icid">$row.icid$</set>
+          <set token="details_dcid">$row.dcid$</set>
+          <set token="details_sender">$row.sender$</set>
+          <set token="details_recipient">$row.recipient$</set>
+          <set token="details_internal_message_id">$row.internal_message_id_token$</set>
+          <set token="details_internal_message_id_first">$row.first_mid$</set>
+          <set token="details_internal_message_id_eval">$row.internal_message_id_eval_token$</set>
+          <set token="details_internal_message_id_eval_not">$row.internal_message_id_eval_not_toke$</set>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>"raw" log</title>
+      <table id="details" depends="$details_icid$">
+        <search>
+          <query>`ironport_log` (dcid=$details_dcid$ OR internal_message_id=$details_internal_message_id$ OR icid=$details_icid$)
+| bin _time span=15m AS timespan
+| eventstats values(prev_internal_message_id) AS prev_internal_message_id by internal_message_id timespan
+| eval first_mid=if(internal_message_id!="", internal_message_id, ""), first_mid=if(prev_internal_message_id!="", prev_internal_message_id, first_mid)
+| where icid!=0 OR isnull(icid)
+| streamstats values(internal_message_id) AS internal_message_id by icid timespan
+| eval first_mid=if(isnull(first_mid) OR first_mid=="", internal_message_id, first_mid)
+| eval internal_message_id=if(first_mid==internal_message_id, internal_message_id, if(prev_internal_message_id==internal_message_id, prev_internal_message_id, internal_message_id)) 
+| streamstats values(internal_message_id) AS first_mid by dcid timespan
+| eval sort_order=case(
+isnotnull(icid) AND vendor_action=="inc_connection_new", "00",
+isnotnull(icid) AND like(vendor_action, "TLS%"), "01",
+isnotnull(icid) AND vendor_action=="inc_connection_closed", "06", 
+isnotnull(icid) AND isnotnull(internal_message_id) AND isnotnull(sender), "03", 
+isnotnull(icid) AND isnotnull(internal_message_id) AND isnotnull(recipient), "04",
+isnotnull(icid) AND isnotnull(internal_message_id), "02", 
+internal_message_id==first_mid AND vendor_action=="Message aborted", "02",
+internal_message_id==first_mid AND vendor_action=="Message done", 13,
+internal_message_id==first_mid AND vendor_action=="done", 14,
+internal_message_id==first_mid AND vendor_action=="message_filter", 12,
+internal_message_id==first_mid AND isnotnull(graymail_status), 11,
+internal_message_id==first_mid AND isnotnull(spam_status), "08",
+internal_message_id==first_mid AND isnotnull(antivirus_status), "09",
+internal_message_id==first_mid AND isnotnull(outbreak_filter_status), 10,
+internal_message_id==first_mid, 13, 
+internal_message_id!=first_mid AND vendor_action=="done", 33,
+internal_message_id!=first_mid AND vendor_action=="mid_rewritten", 15,
+internal_message_id!=first_mid AND isnotnull(first_mid), 20, 
+isnotnull(dcid) AND internal_message_id!=first_mid AND vendor_action=="Message done", 34,
+isnotnull(dcid) AND vendor_action=="out_connection_new", 25, 
+isnotnull(dcid) AND vendor_action=="out_connection_closed", 35, 
+isnotnull(internal_message_id) AND isnotnull(dcid), 30, 
+isnotnull(dcid), 30), message=sort_order." - ".strftime(_time, "%F %T")." - ".substr(syslog_facility,0,4)." - ".syslog_message
+| sort message _time 
+| eval part_of_message=case(
+isnotnull(icid) AND icid=="$details_icid$", 1,
+isnotnull(internal_message_id) AND (internal_message_id==$details_internal_message_id_eval$), 1,
+isnotnull(dcid) AND isnotnull(internal_message_id) AND dcid=="$details_dcid$" AND (internal_message_id==$details_internal_message_id_eval$), 1,
+isnotnull(dcid) AND isnotnull(internal_message_id) AND (dcid!="$details_dcid$" OR internal_message_id!=$details_internal_message_id_first$), 0,
+isnotnull(dcid) AND dcid=="$details_dcid$", 1,
+1==1, 0)
+| where part_of_message=="1"
+| stats values(sender) AS sender, values(recipient) AS recipient, values(subject) AS subject, values(file_name) AS file_name, min(_time) AS _time, values(message) AS message BY first_mid host timespan
+| rex mode=sed field=message "s/(\d\d\s\-\s)(.*)/\2/g"
+| search sender=$details_sender$ recipient=$details_recipient$</query>
+          <earliest>$timeRange.earliest$</earliest>
+          <latest>$timeRange.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <fields>message</fields>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">false</option>
+      </table>
+    </panel>
+  </row>
+</form>

@@ -1,0 +1,291 @@
+<form refresh="120">
+  <label>Ironport Connections</label>
+  <fieldset submitButton="false">
+    <input type="time" token="timeRange">
+      <label>Time Range</label>
+      <default>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="dropdown" token="viewType_Select">
+      <label>View type</label>
+      <choice value="in_out_connections">In/Out  Connections</choice>
+      <choice value="spam_mails">Spam mails</choice>
+      <choice value="virus_mails">Virus mails</choice>
+      <default>in_out_connections</default>
+      <initialValue>in_out_connections</initialValue>
+      <change>
+        <condition value="in_out_connections">
+          <set token="in_out_connections">true</set>
+          <unset token="spam_mails"></unset>
+          <unset token="virus_mails"></unset>
+        </condition>
+        <condition value="spam_mails">
+          <unset token="in_out_connections"></unset>
+          <set token="spam_mails">true</set>
+          <unset token="virus_mails"></unset>
+        </condition>
+        <condition value="virus_mails">
+          <unset token="in_out_connections"></unset>
+          <unset token="spam_mails"></unset>
+          <set token="virus_mails">true</set>
+        </condition>
+      </change>
+    </input>
+  </fieldset>
+  <row>
+    <panel depends="$in_out_connections$">
+      <title>Incomming connections</title>
+      <map>
+        <search>
+          <query>index=ironport New icid inc_remote_ip!=10.0.0.0/8 inc_remote_ip!=172.16.0.0/12 inc_remote_ip!=192.168.0.0/16
+| iplocation inc_remote_ip 
+| stats count by Country
+| search Country!=""
+| geom geo_countries featureIdField="Country" allFeatures=true
+| kmeans k=9 count
+| eventstats min(count) as min, max(count) as max by CLUSTERNUM
+| sort min
+| eval count=min."-".max 
+| fields - CLUSTERNUM centroid_count max min</query>
+          <earliest>$timeRange.earliest$</earliest>
+          <latest>$timeRange.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="drilldown">all</option>
+        <option name="mapping.choroplethLayer.colorBins">9</option>
+        <option name="mapping.choroplethLayer.colorMode">auto</option>
+        <option name="mapping.choroplethLayer.maximumColor">0xDB5800</option>
+        <option name="mapping.choroplethLayer.minimumColor">0x2F25BA</option>
+        <option name="mapping.choroplethLayer.neutralPoint">0</option>
+        <option name="mapping.choroplethLayer.shapeOpacity">0.75</option>
+        <option name="mapping.choroplethLayer.showBorder">1</option>
+        <option name="mapping.data.maxClusters">100</option>
+        <option name="mapping.map.center">(45.95,24.43)</option>
+        <option name="mapping.map.panning">1</option>
+        <option name="mapping.map.scrollZoom">0</option>
+        <option name="mapping.map.zoom">2</option>
+        <option name="mapping.markerLayer.markerMaxSize">50</option>
+        <option name="mapping.markerLayer.markerMinSize">10</option>
+        <option name="mapping.markerLayer.markerOpacity">0.8</option>
+        <option name="mapping.showTiles">1</option>
+        <option name="mapping.tileLayer.maxZoom">7</option>
+        <option name="mapping.tileLayer.minZoom">0</option>
+        <option name="mapping.tileLayer.tileOpacity">1</option>
+        <option name="mapping.type">choropleth</option>
+      </map>
+    </panel>
+  </row>
+  <row>
+    <panel depends="$in_out_connections$">
+      <title>Outgoing connections</title>
+      <map>
+        <search>
+          <query>index=ironport New dcid out_remote_ip!=10.0.0.0/8 out_remote_ip!=172.16.0.0/12 out_remote_ip!=192.168.0.0/16
+| iplocation out_remote_ip 
+| stats count by Country
+| search Country!=""
+| geom geo_countries featureIdField="Country" allFeatures=true
+| kmeans k=9 count
+| eventstats min(count) as min, max(count) as max by CLUSTERNUM
+| sort min
+| eval count=min."-".max 
+| fields - CLUSTERNUM centroid_count max min</query>
+          <earliest>$timeRange.earliest$</earliest>
+          <latest>$timeRange.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="drilldown">all</option>
+        <option name="mapping.choroplethLayer.colorBins">9</option>
+        <option name="mapping.choroplethLayer.colorMode">auto</option>
+        <option name="mapping.choroplethLayer.maximumColor">0xDB5800</option>
+        <option name="mapping.choroplethLayer.minimumColor">0x2F25BA</option>
+        <option name="mapping.choroplethLayer.neutralPoint">0</option>
+        <option name="mapping.choroplethLayer.shapeOpacity">0.75</option>
+        <option name="mapping.choroplethLayer.showBorder">1</option>
+        <option name="mapping.data.maxClusters">100</option>
+        <option name="mapping.map.center">(45.95,24.43)</option>
+        <option name="mapping.map.panning">1</option>
+        <option name="mapping.map.scrollZoom">0</option>
+        <option name="mapping.map.zoom">2</option>
+        <option name="mapping.markerLayer.markerMaxSize">50</option>
+        <option name="mapping.markerLayer.markerMinSize">10</option>
+        <option name="mapping.markerLayer.markerOpacity">0.8</option>
+        <option name="mapping.showTiles">1</option>
+        <option name="mapping.tileLayer.maxZoom">7</option>
+        <option name="mapping.tileLayer.minZoom">0</option>
+        <option name="mapping.tileLayer.tileOpacity">1</option>
+        <option name="mapping.type">choropleth</option>
+      </map>
+    </panel>
+  </row>
+  <row>
+    <panel depends="$spam_mails$">
+      <title>Spam mails</title>
+      <map>
+        <search>
+          <query>`ironport_log` 
+    [| search `ironport_log` 
+        [| search `ironport_log` spam_status!="negative" 
+        | stats count by internal_message_id 
+        | table internal_message_id ] 
+    | stats count by icid 
+    | table icid ] 
+| streamstats values(internal_message_id) AS internal_message_id, values(inc_remote_ip) AS inc_remote_ip by icid
+| stats dc(recipient) AS dc_recipient, values(inc_remote_ip) AS inc_remote_ip BY internal_message_id host 
+| iplocation inc_remote_ip
+| stats sum(dc_recipient) AS count by Country
+| search Country!=""
+| geom geo_countries featureIdField="Country" allFeatures=true
+| kmeans k=9 count
+| fillnull value=1 CLUSTERNUM
+| eventstats min(count) as min, max(count) as max by CLUSTERNUM
+| sort min
+| eval count=min."-".max 
+| fields - CLUSTERNUM centroid_count max min</query>
+          <earliest>$timeRange.earliest$</earliest>
+          <latest>$timeRange.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="height">750</option>
+        <option name="drilldown">all</option>
+        <option name="mapping.choroplethLayer.colorBins">5</option>
+        <option name="mapping.choroplethLayer.colorMode">auto</option>
+        <option name="mapping.choroplethLayer.maximumColor">0xDB5800</option>
+        <option name="mapping.choroplethLayer.minimumColor">0x2F25BA</option>
+        <option name="mapping.choroplethLayer.neutralPoint">0</option>
+        <option name="mapping.choroplethLayer.shapeOpacity">0.75</option>
+        <option name="mapping.choroplethLayer.showBorder">1</option>
+        <option name="mapping.data.maxClusters">100</option>
+        <option name="mapping.map.center">(45.95,24.43)</option>
+        <option name="mapping.map.panning">1</option>
+        <option name="mapping.map.scrollZoom">0</option>
+        <option name="mapping.map.zoom">2</option>
+        <option name="mapping.markerLayer.markerMaxSize">50</option>
+        <option name="mapping.markerLayer.markerMinSize">10</option>
+        <option name="mapping.markerLayer.markerOpacity">0.8</option>
+        <option name="mapping.showTiles">1</option>
+        <option name="mapping.tileLayer.maxZoom">7</option>
+        <option name="mapping.tileLayer.minZoom">0</option>
+        <option name="mapping.tileLayer.tileOpacity">1</option>
+        <option name="mapping.type">choropleth</option>
+      </map>
+    </panel>
+  </row>
+  <row>
+    <panel depends="$virus_mails$">
+      <title>Virus mails</title>
+      <map>
+        <search>
+          <query>`ironport_log` 
+    [| search `ironport_log` 
+        [| search `ironport_log` antivirus_status="positive" 
+        | stats count by internal_message_id 
+        | table internal_message_id ] 
+    | stats count by icid 
+    | table icid ] 
+| streamstats values(internal_message_id) AS internal_message_id, values(inc_remote_ip) AS inc_remote_ip by icid
+| stats dc(recipient) AS dc_recipient, values(inc_remote_ip) AS inc_remote_ip BY internal_message_id host 
+| iplocation inc_remote_ip
+| stats sum(dc_recipient) AS count by Country
+| search Country!=""
+| geom geo_countries featureIdField="Country" allFeatures=true
+| kmeans k=9 count
+| fillnull value=1 CLUSTERNUM
+| eventstats min(count) as min, max(count) as max by CLUSTERNUM
+| sort min
+| eval count=min."-".max 
+| fields - CLUSTERNUM centroid_count max min</query>
+          <earliest>$timeRange.earliest$</earliest>
+          <latest>$timeRange.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="height">750</option>
+        <option name="drilldown">all</option>
+        <option name="mapping.choroplethLayer.colorBins">5</option>
+        <option name="mapping.choroplethLayer.colorMode">auto</option>
+        <option name="mapping.choroplethLayer.maximumColor">0xDB5800</option>
+        <option name="mapping.choroplethLayer.minimumColor">0x2F25BA</option>
+        <option name="mapping.choroplethLayer.neutralPoint">0</option>
+        <option name="mapping.choroplethLayer.shapeOpacity">0.75</option>
+        <option name="mapping.choroplethLayer.showBorder">1</option>
+        <option name="mapping.data.maxClusters">100</option>
+        <option name="mapping.map.center">(45.95,24.43)</option>
+        <option name="mapping.map.panning">1</option>
+        <option name="mapping.map.scrollZoom">0</option>
+        <option name="mapping.map.zoom">2</option>
+        <option name="mapping.markerLayer.markerMaxSize">50</option>
+        <option name="mapping.markerLayer.markerMinSize">10</option>
+        <option name="mapping.markerLayer.markerOpacity">0.8</option>
+        <option name="mapping.showTiles">1</option>
+        <option name="mapping.tileLayer.maxZoom">7</option>
+        <option name="mapping.tileLayer.minZoom">0</option>
+        <option name="mapping.tileLayer.tileOpacity">1</option>
+        <option name="mapping.type">choropleth</option>
+      </map>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Incoming connections by cipher</title>
+      <table>
+        <search>
+          <query>`ironport_log` icid=* 
+| fillnull value="none" in_cipher
+| stats values(in_cipher) AS in_cipher, values(inc_interface) AS inc_interface by icid
+| eval in_cipher=mvsort(in_cipher), in_cipher=if(mvcount(in_cipher)&gt;1, mvindex(in_cipher,0), in_cipher)
+| stats count(eval(inc_interface="Private-Bulk")) AS Private_Bulk, count(eval(inc_interface="Private_IP")) AS Private_IP, count(eval(inc_interface="Public_IP")) AS Public_IP, count(eval(inc_interface="Public_Logius")) AS Public_Logius count(eval(inc_interface!="Private-Bulk" AND inc_interface!="Private_IP" AND inc_interface!="Public_IP" AND inc_interface!="Public_Logius")) AS other by in_cipher
+| addtotals col=f row=t label="Total"
+| lookup cipher_suites.csv suite AS in_cipher OUTPUT strength
+| fillnull value="NONE" strength
+| sort - Total
+| table in_cipher strength Private* Public* other Total</query>
+          <earliest>1508144400</earliest>
+          <latest>1508230800</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+        <format type="color" field="strength">
+          <colorPalette type="map">{"HIGH":#65A637,"MEDIUM":#ED8440,"LOW":#D93F3C,"NONE":#555555}</colorPalette>
+        </format>
+      </table>
+    </panel>
+    <panel>
+      <title>Outgoing connections by cipher</title>
+      <table>
+        <search>
+          <query>`ironport_log` dcid=*
+| fillnull value="none" out_cipher
+| stats values(out_cipher) AS out_cipher BY dcid
+| eval out_cipher=mvsort(out_cipher), out_cipher=if(mvcount(out_cipher)&gt;1, mvindex(out_cipher,0), out_cipher)
+| stats count by out_cipher
+| lookup cipher_suites.csv suite AS out_cipher OUTPUT strength
+| fillnull value="NONE" strength
+| sort - count
+| table out_cipher strength count
+| addtotals col=t row=f label="Total" labelfield=out_cipher</query>
+          <earliest>-24h@h</earliest>
+          <latest>now</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+        <format type="color" field="strength">
+          <colorPalette type="map">{"HIGH":#65A637,"MEDIUM":#ED8440,"LOW":#D93F3C,"NONE":#555555}</colorPalette>
+        </format>
+      </table>
+    </panel>
+  </row>
+</form>
