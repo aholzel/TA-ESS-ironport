@@ -1,19 +1,52 @@
-[datamodels/Ironport_Mail]
-access = read : [ * ], write : [ admin ]
-export = system
-owner = admin
-version = 6.3.3
-modtime = 1461570512.057466000
 
-[models/Ironport_Mail]
-access = read : [ * ], write : [ admin ]
-export = system
-owner = admin
-version = 6.3.3
-modtime = 1461570512.063153000
+# Application-level permissions
 
-[macros/ironport_index_sourcetype]
+[]
+access = read : [ * ], write : [ admin, power ]
+
+### EVENT TYPES
+
+[eventtypes]
 export = system
-owner = admin
-version = 6.3.3
-modtime = 1462298271.477381000
+
+
+### PROPS
+
+[props]
+export = system
+
+
+### TRANSFORMS
+
+[transforms]
+export = system
+
+
+### LOOKUPS
+
+[lookups]
+export = system
+
+
+### VIEWSTATES: even normal users should be able to create shared viewstates
+
+[viewstates]
+access = read : [ * ], write : [ * ]
+export = system
+
+### MACROS
+[macros]
+export = system
+
+
+### SAVEDSEARCHES
+[savedsearches]
+export = system
+
+### VIEWS
+[views]
+export = system
+
+### TAGS
+[tags]
+export = system
